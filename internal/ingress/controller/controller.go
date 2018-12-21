@@ -87,7 +87,8 @@ type Configuration struct {
 
 	EnableProfiling bool
 
-	EnableMetrics bool
+	EnableMetrics  bool
+	MetricsPerHost bool
 
 	EnableSSLChainCompletion bool
 
@@ -472,6 +473,7 @@ func (n *NGINXController) getBackendServers(ingresses []*ingress.Ingress) ([]*in
 						loc.ConfigurationSnippet = anns.ConfigurationSnippet
 						loc.CorsConfig = anns.CorsConfig
 						loc.ExternalAuth = anns.ExternalAuth
+						loc.HTTP2PushPreload = anns.HTTP2PushPreload
 						loc.Proxy = anns.Proxy
 						loc.RateLimit = anns.RateLimit
 						loc.Redirect = anns.Redirect
