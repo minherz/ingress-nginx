@@ -155,7 +155,11 @@ local function route_to_alternative_balancer(balancer)
 
   local header = ngx.var["http_" .. clean_target_header]
   if header then
-    if header == "always" then
+    if traffic_shaping_policy.headerValue then
+      if traffic_shaping_policy.headerValue == header then
+        return true
+      end
+    elseif header == "always" then
       return true
     elseif header == "never" then
       return false
