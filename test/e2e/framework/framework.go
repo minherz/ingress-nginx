@@ -20,7 +20,7 @@ import (
 	"time"
 
 	appsv1beta1 "k8s.io/api/apps/v1beta1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	extensions "k8s.io/api/extensions/v1beta1"
 	apiextcs "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -372,17 +372,32 @@ func UpdateDeployment(kubeClientSet kubernetes.Interface, namespace string, name
 	return nil
 }
 
+// UpdateIngress runs the given updateFunc on the ingress
+func UpdateIngress(kubeClientSet kubernetes.Interface, namespace string, name string, updateFunc func(d *extensions.Ingress) error) error {
+	ingress, err := kubeClientSet.ExtensionsV1beta1().Ingresses(namespace).Get(name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	if err := updateFunc(ingress); err != nil {
+		return err
+	}
+
+	_, err = kubeClientSet.ExtensionsV1beta1().Ingresses(namespace).Update(ingress)
+	return err
+}
+
 // NewSingleIngressWithTLS creates a simple ingress rule with TLS spec included
-func NewSingleIngressWithTLS(name, path, host, ns, service string, port int, annotations *map[string]string) *extensions.Ingress {
-	return newSingleIngressWithRules(name, path, host, ns, service, port, annotations, true)
+func NewSingleIngressWithTLS(name, path, host string, tlsHosts []string, ns, service string, port int, annotations *map[string]string) *extensions.Ingress {
+	return newSingleIngressWithRules(name, path, host, ns, service, port, annotations, tlsHosts)
 }
 
 // NewSingleIngress creates a simple ingress rule
 func NewSingleIngress(name, path, host, ns, service string, port int, annotations *map[string]string) *extensions.Ingress {
-	return newSingleIngressWithRules(name, path, host, ns, service, port, annotations, false)
+	return newSingleIngressWithRules(name, path, host, ns, service, port, annotations, nil)
 }
 
-func newSingleIngressWithRules(name, path, host, ns, service string, port int, annotations *map[string]string, withTLS bool) *extensions.Ingress {
+func newSingleIngressWithRules(name, path, host, ns, service string, port int, annotations *map[string]string, tlsHosts []string) *extensions.Ingress {
 
 	spec := extensions.IngressSpec{
 		Rules: []extensions.IngressRule{
@@ -405,10 +420,10 @@ func newSingleIngressWithRules(name, path, host, ns, service string, port int, a
 		},
 	}
 
-	if withTLS {
+	if len(tlsHosts) > 0 {
 		spec.TLS = []extensions.IngressTLS{
 			{
-				Hosts:      []string{host},
+				Hosts:      tlsHosts,
 				SecretName: host,
 			},
 		}
