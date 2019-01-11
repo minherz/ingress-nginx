@@ -17,8 +17,12 @@ limitations under the License.
 package canary
 
 import (
+	"regexp"
+	"strings"
+
 	extensions "k8s.io/api/extensions/v1beta1"
 
+	yaml "gopkg.in/yaml.v2"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
 	"k8s.io/ingress-nginx/internal/ingress/errors"
 	"k8s.io/ingress-nginx/internal/ingress/resolver"
@@ -28,12 +32,31 @@ type canary struct {
 	r resolver.Resolver
 }
 
+var (
+	headerRegexp = regexp.MustCompile(`^[a-zA-Z\d\-_]+$`)
+)
+
+// Policy public struct for parsing `canary-by-policy` YAML data
+// struct fields have to be public in order for yaml.Unmarshal to populate them correctly
+type Policy struct {
+	Header struct {
+		Name   string   `yaml:"name"`
+		Values []string `yaml:"values,flow"`
+	}
+	Cookie struct {
+		Name   string   `yaml:"name"`
+		Values []string `yaml:"values,flow"`
+	}
+	Weigth int `yaml:"weight"`
+}
+
 // Config returns the configuration rules for setting up the Canary
 type Config struct {
-	Enabled bool
-	Weight  int
-	Header  string
-	Cookie  string
+	Header       string
+	HeaderValues []string
+	Cookie       string
+	CookieValues []string
+	Weight       int
 }
 
 // NewParser parses the ingress for canary related annotations
@@ -46,30 +69,46 @@ func NewParser(r resolver.Resolver) parser.IngressAnnotation {
 func (c canary) Parse(ing *extensions.Ingress) (interface{}, error) {
 	config := &Config{}
 	var err error
+	var predicate string
 
-	config.Enabled, err = parser.GetBoolAnnotation("canary", ing)
+	predicate, err = parser.GetStringAnnotation("canary-by-policy", ing)
 	if err != nil {
-		config.Enabled = false
+		return config, nil
 	}
-
-	config.Weight, err = parser.GetIntAnnotation("canary-weight", ing)
+	policy := Policy{}
+	err = yaml.Unmarshal([]byte(predicate), &policy)
 	if err != nil {
-		config.Weight = 0
+		return nil, errors.NewInvalidAnnotationConfiguration("canary-by-policy", "bad YAML policy")
 	}
-
-	config.Header, err = parser.GetStringAnnotation("canary-by-header", ing)
-	if err != nil {
-		config.Header = ""
+	if policy.Header.Name != "" {
+		if len(policy.Header.Values) == 0 || !headerRegexp.MatchString(policy.Header.Name) {
+			return nil, errors.NewInvalidAnnotationConfiguration("canary-by-policy", "invalid canary header policy")
+		}
+		for _, v := range policy.Header.Values {
+			if v == "" {
+				return nil, errors.NewInvalidAnnotationConfiguration("canary-by-policy", "empty header value")
+			}
+		}
+		// convert to nginx syntax
+		config.Header = "http_" + strings.Replace(strings.ToLower(policy.Header.Name), "-", "_", -1)
+		config.HeaderValues = policy.Header.Values
 	}
-
-	config.Cookie, err = parser.GetStringAnnotation("canary-by-cookie", ing)
-	if err != nil {
-		config.Cookie = ""
+	if policy.Cookie.Name != "" {
+		if len(policy.Cookie.Values) == 0 || !headerRegexp.MatchString(policy.Cookie.Name) {
+			return nil, errors.NewInvalidAnnotationConfiguration("canary-by-policy", "invalid canary cookie policy")
+		}
+		for _, v := range policy.Cookie.Values {
+			if v == "" {
+				return nil, errors.NewInvalidAnnotationConfiguration("canary-by-policy", "empty cookie value")
+			}
+		}
+		// convert to nginx syntax
+		config.Cookie = "cookie_" + strings.Replace(strings.ToLower(policy.Cookie.Name), "-", "_", -1)
+		config.CookieValues = policy.Cookie.Values
 	}
-
-	if !config.Enabled && (config.Weight > 0 || len(config.Header) > 0 || len(config.Cookie) > 0) {
-		return nil, errors.NewInvalidAnnotationConfiguration("canary", "configured but not enabled")
+	if policy.Weigth < 0 || policy.Weigth > 100 {
+		return nil, errors.NewInvalidAnnotationConfiguration("canary-by-policy", "invalid weight policy")
 	}
-
+	config.Weight = policy.Weigth
 	return config, nil
 }

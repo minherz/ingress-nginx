@@ -116,10 +116,14 @@ type TrafficShapingPolicy struct {
 	// e.g. Weight 20 means 20% of traffic will be redirected to the backend and 80% will remain
 	// with the other backend. 0 weight will not send any traffic to this backend
 	Weight int `json:"weight"`
-	// Header on which to redirect requests to this backend
+	// Header key in ngnix on which to redirect requests to this backend
 	Header string `json:"header"`
-	// Cookie on which to redirect requests to this backend
+	// HeaderValues array of header values to match in order to redirect requests to this backend
+	HeaderValues []string `json:"headerValues,omitempty"`
+	// Cookie key in nginx on which to redirect requests to this backend
 	Cookie string `json:"cookie"`
+	// CookieValues array of cookie values to match in order to redirect requests to this backend
+	CookieValues []string `json:"cookieValues,omitempty"`
 }
 
 // HashInclude defines if a field should be used or not to calculate the hash

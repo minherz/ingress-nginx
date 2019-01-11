@@ -272,10 +272,30 @@ func (tsp1 TrafficShapingPolicy) Equal(tsp2 TrafficShapingPolicy) bool {
 	if tsp1.Header != tsp2.Header {
 		return false
 	}
+	if equals(tsp1.HeaderValues, tsp2.HeaderValues) {
+		return false
+	}
 	if tsp1.Cookie != tsp2.Cookie {
 		return false
 	}
+	if equals(tsp1.CookieValues, tsp2.CookieValues) {
+		return false
+	}
 
+	return true
+}
+
+// equals compares in natural order; same values in different order yield 'false'
+func equals(s1, s2 []string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+
+	for i, s := range s1 {
+		if s != s2[i] {
+			return false
+		}
+	}
 	return true
 }
 
